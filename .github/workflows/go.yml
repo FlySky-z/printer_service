@@ -1,0 +1,106 @@
+name: printer_service CI/CD Workflow
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # 前端构建
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 设置 Node.js 环境
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      # 安装前端依赖
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      # 构建前端
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # 上传构建产物供后续使用
+      - name: Upload frontend build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/dist
+
+  # 后端构建和测试
+  backend:
+    name: Backend Build and Test
+    runs-on: ubuntu-latest
+    needs: [frontend] # 后端依赖前端完成
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 下载前端构建产物
+      - name: Download frontend build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/dist
+
+      # 设置 Go 环境
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.1'
+
+      # 下载依赖
+      - name: Install dependencies
+        run: go mod tidy
+
+      # 构建后端
+      - name: Build backend
+        run: go build -v ./...
+
+      # 测试后端
+      - name: Run tests
+        run: go test -v ./...
+
+  # 集成测试
+  integration:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: [backend] # 集成测试依赖后端完成
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 下载前端构建产物
+      - name: Download frontend build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/dist
+
+      # 设置 Go 环境
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.1'
+
+      # 启动后端服务
+      - name: Start backend server
+        run: go run main.go &
+
+      # 测试服务是否正常运行
+      - name: Run integration tests
+        run: curl -f http://localhost:80 || exit 1
