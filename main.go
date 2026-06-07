@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"printer/config"
+	"printer/handler"
 	"printer/router"
 	"syscall"
 	"time"
@@ -35,6 +36,7 @@ func interruptServer(server *http.Server) {
 }
 func main() {
 	config.SetGinMode("release")
+	handler.InitSoftwareStatus()
 	r := router.SetupRouter()
 
 	server := &http.Server{

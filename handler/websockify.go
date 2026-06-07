@@ -10,6 +10,15 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func isAllowedTarget(connections []VncConnection, addr string) bool {
+	for _, c := range connections {
+		if c.Url == addr {
+			return true
+		}
+	}
+	return false
+}
+
 // WebsockifyConfig 存储websockify代理的配置
 type WebsockifyConfig struct {
 	// 默认目标TCP服务器地址，如果WebSocket请求未指定，将使用此地址
@@ -70,6 +79,13 @@ func (ws *Websockify) HandleWebsockify(w http.ResponseWriter, r *http.Request) {
 	if addr == "" {
 		addr = ws.config.DefaultTarget
 		log.Println("未提供主机参数，使用默认TCP服务器地址:", addr)
+	}
+
+	// 只允许连接到已配置的 VNC 地址，防止 SSRF
+	connections, err := loadVncConnections()
+	if err != nil || !isAllowedTarget(connections, addr) {
+		http.Error(w, "不允许的目标地址", http.StatusForbidden)
+		return
 	}
 
 	log.Printf("开始Websockify连接，目标TCP服务器: %s", addr)

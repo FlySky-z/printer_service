@@ -69,9 +69,8 @@ func (p *ProxyServer) handleWebSocket() {
 		// 将消息转发到TCP连接
 		if _, err := p.tcpConn.Write(message); err != nil {
 			log.Println("webSocketToTCP error:", err.Error())
-			// 可能没有初始化tcpConn
-			p.Dial()
-			p.tcpConn.Write(message)
+			p.TearDown()
+			break
 		}
 	}
 }
@@ -96,6 +95,8 @@ func (p *ProxyServer) handleTCP() {
 }
 
 func (p *ProxyServer) TearDown() {
-	p.tcpConn.Close()
+	if p.tcpConn != nil {
+		p.tcpConn.Close()
+	}
 	p.wsConn.Close()
 }

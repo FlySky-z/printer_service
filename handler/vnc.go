@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -52,14 +51,14 @@ func loadVncConnections() ([]VncConnection, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := ioutil.WriteFile(configPath, data, 0644); err != nil {
+		if err := os.WriteFile(configPath, data, 0644); err != nil {
 			return nil, err
 		}
 		return defaultConnections, nil
 	}
 
 	// 读取配置文件
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +77,7 @@ func saveVncConnections(connections []VncConnection) error {
 		return err
 	}
 
-	return ioutil.WriteFile(getVncConfigPath(), data, 0644)
+	return os.WriteFile(getVncConfigPath(), data, 0644)
 }
 
 // ListVncConnections 获取VNC连接列表

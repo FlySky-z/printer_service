@@ -53,10 +53,19 @@ func SetupRouter() *gin.Engine {
 	// VNC连接相关路由
 	vnc := r.Group("/api/vnc")
 	{
-		vnc.GET("/connections", handler.ListVncConnections)            // 获取连接列表
-		vnc.POST("/connections", handler.AddVncConnection)             // 添加新连接
-		vnc.PUT("/connections/:index", handler.UpdateVncConnection)    // 更新连接
-		vnc.DELETE("/connections/:index", handler.DeleteVncConnection) // 删除连接
+		vnc.GET("/connections", handler.ListVncConnections)
+		vnc.POST("/connections", handler.AddVncConnection)
+		vnc.PUT("/connections/:index", handler.UpdateVncConnection)
+		vnc.DELETE("/connections/:index", handler.DeleteVncConnection)
+	}
+
+	// 打印机相关路由
+	printer := r.Group("/api/printer")
+	{
+		printer.GET("/software", handler.HandleSoftwareStatus)
+		printer.GET("/list", handler.HandlePrinterList)
+		printer.GET("/status", handler.HandlePrinterStatus)
+		printer.GET("/jobs/:name", handler.HandlePrinterJobs)
 	}
 
 	return r

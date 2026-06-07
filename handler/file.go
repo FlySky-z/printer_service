@@ -54,9 +54,17 @@ func UploadFile(c *gin.Context) {
 	})
 }
 
+func isSafeFilename(filename string) bool {
+	return filename == filepath.Base(filename) && !filepath.IsAbs(filename)
+}
+
 // DownloadFile 处理文件下载
 func DownloadFile(c *gin.Context) {
 	filename := c.Param("filename")
+	if !isSafeFilename(filename) {
+		c.JSON(400, gin.H{"error": "无效的文件名"})
+		return
+	}
 	filePath := filepath.Join(uploadDir, filename)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -105,6 +113,10 @@ func ListFiles(c *gin.Context) {
 // DeleteFile 处理文件删除
 func DeleteFile(c *gin.Context) {
 	filename := c.Param("filename")
+	if !isSafeFilename(filename) {
+		c.JSON(400, gin.H{"error": "无效的文件名"})
+		return
+	}
 	filePath := filepath.Join(uploadDir, filename)
 
 	// 检查文件是否存在

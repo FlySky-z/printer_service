@@ -4,6 +4,48 @@
       <h1 style="padding-top: 12px;">欢迎使用文件管理系统</h1>
       <p class="welcome-text">您可以在此上传、管理和下载您的文件</p>
     </div>
+
+    <div style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; animation: fadeIn 0.5s ease 0.1s both;">
+      <span style="color: #666; font-size: 13px; font-weight: 500;">可直接打印:</span>
+      <span style="font-size: 13px; color: #555;">Word</span>
+      <a-tag v-if="softwareStatus" :color="softwareStatus.wps ? 'success' : 'error'" style="margin: 0">
+        {{ softwareStatus.wps ? 'WPS ✓' : '未安装WPS' }}
+      </a-tag>
+      <span style="font-size: 13px; color: #555;">PDF</span>
+      <a-tag v-if="softwareStatus" :color="softwareStatus.acrobat ? 'success' : 'error'" style="margin: 0">
+        {{ softwareStatus.acrobat ? 'Acrobat ✓' : '未安装Acrobat' }}
+      </a-tag>
+    </div>
+
+    <a-spin :spinning="loadingPrinterStatus">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px; animation: fadeIn 0.5s ease 0.2s both;">
+        <span style="font-size:13px;font-weight:500;color:#666">当前打印机:</span>
+        <span style="font-size:13px;color:#333">{{ selectedPrinter || '无' }}</span>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; animation: fadeIn 0.5s ease 0.2s both;">
+        <div v-for="p in printerStatusList" :key="p.name" class="printer-card" @click="showJobs(p.name)" style="cursor:pointer">
+          <div style="display:flex;align-items:center;gap:8px">
+            <a-radio :value="p.name" :checked="selectedPrinter === p.name" @click.stop="selectedPrinter = p.name" />
+            <div class="printer-card-left">
+              <div class="printer-name">{{ p.name }}</div>
+              <div class="printer-jobs">{{ p.job_count > 0 ? `${p.job_count} 个任务` : '队列为空' }}</div>
+            </div>
+          </div>
+          <a-tag :color="printerStatusColor(p.status)" style="margin:0 0 0 12px">{{ printerStatusText(p.status) }}</a-tag>
+        </div>
+      </div>
+    </a-spin>
+
+    <a-modal v-model:open="jobsModalVisible" :title="`${selectedPrinterName} 队列`" :footer="null">
+      <a-spin :spinning="loadingJobs">
+        <div v-if="!loadingJobs && jobsList.length === 0" style="text-align:center;color:#999;padding:16px">队列为空</div>
+        <a-list v-else :data-source="jobsList" item-layout="horizontal">
+          <template #renderItem="{ item }">
+            <a-list-item>{{ item.document || `任务 #${item.job_id}` }}</a-list-item>
+          </template>
+        </a-list>
+      </a-spin>
+    </a-modal>
     
     <div class="uploader-section">
       <div class="uploader-card">
@@ -15,7 +57,10 @@
     
     <div class="file-list">
       <div class="list-card">
-        <h2>文件列表</h2>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <h2 style="margin:0">文件列表</h2>
+          <a-button @click="handleVnc">远程桌面</a-button>
+        </div>
         <p class="list-hint">共 {{ files.length }} 个文件</p>
         <a-table 
           :dataSource="files" 
@@ -26,7 +71,7 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'action'">
-              <FileOperations :file="record" @file-deleted="fetchFiles" />
+              <FileOperations :file="record" :selected-printer="selectedPrinter" @file-deleted="fetchFiles" />
             </template>
           </template>
         </a-table>
@@ -37,6 +82,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import FileOperations from '@/components/FileOperations.vue'
 import FileUploader from '@/components/FileUploader.vue'
@@ -47,6 +93,7 @@ interface FileInfo {
   upload_time: string
 }
 
+const router = useRouter()
 const files = ref<FileInfo[]>([])
 const apiUrl = import.meta.env.VITE_API_URL;
 const columns = [
@@ -105,8 +152,58 @@ const formatDate = (timestamp: string) => {
   return date.toLocaleString()
 }
 
-onMounted(() => {
+const softwareStatus = ref<{ wps: boolean; acrobat: boolean } | null>(null)
+const loadingPrinterStatus = ref(false)
+const printerStatusList = ref<{ name: string; status: number; job_count: number }[]>([])
+const selectedPrinter = ref('')
+const printerStatusText = (s: number) => ({ 3: 'Idle', 4: 'Printing', 7: 'Offline' }[s] ?? `Unknown`)
+const printerStatusColor = (s: number) => ({ 3: 'success', 4: 'processing', 7: 'default' }[s] ?? 'warning')
+
+const jobsModalVisible = ref(false)
+const loadingJobs = ref(false)
+const jobsList = ref<{ job_id: number; document: string; status: number }[]>([])
+const selectedPrinterName = ref('')
+
+const showJobs = async (name: string) => {
+  selectedPrinterName.value = name
+  jobsModalVisible.value = true
+  loadingJobs.value = true
+  try {
+    const res = await fetch(`${apiUrl}/api/printer/jobs/${encodeURIComponent(name)}`)
+    if (res.ok) jobsList.value = await res.json()
+  } catch {}
+  loadingJobs.value = false
+}
+
+const handleVnc = async () => {
+  try {
+    const res = await fetch(`${apiUrl}/api/vnc/connections`)
+    if (res.ok) {
+      const connections = await res.json()
+      if (connections?.length > 0) {
+        router.push({ path: '/vnc', query: { hostname: connections[0].name } })
+        return
+      }
+    }
+  } catch {}
+  router.push('/vnc')
+}
+
+onMounted(async () => {
   fetchFiles()
+  loadingPrinterStatus.value = true
+  try {
+    const [swRes, prRes] = await Promise.all([
+      fetch(`${apiUrl}/api/printer/software`),
+      fetch(`${apiUrl}/api/printer/status`)
+    ])
+    if (swRes.ok) softwareStatus.value = await swRes.json()
+    if (prRes.ok) {
+      printerStatusList.value = await prRes.json()
+      if (printerStatusList.value.length > 0) selectedPrinter.value = printerStatusList.value[0].name
+    }
+  } catch {}
+  loadingPrinterStatus.value = false
 })
 </script>
 
@@ -116,6 +213,29 @@ onMounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   min-height: 100vh;
+}
+
+.printer-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: #fafafa;
+}
+
+.printer-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.printer-jobs {
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
 }
 
 .welcome-section {
